@@ -121,6 +121,9 @@ public class ConnectionWorker implements Runnable {
                 case "title":
                     editTitle(arguments);
                     break;
+                case "time":
+                    editTime(arguments);
+                    break;
                 case "help":
                     System.out.println("Editing crime commands:");
                     System.out.println("title [new title] - shows title or changes title to new");
@@ -198,7 +201,7 @@ public class ConnectionWorker implements Runnable {
             Crime crime = mCrimes.get(crimeIndex);
             if (crime != null) {
                 mMode = MODE_EDIT_CRIME;
-                System.out.println("Editing crime \""+crime.getTitle()+"\"(#"+crimeIndex+")");
+                System.out.println("Editing crime \"" + crime.getTitle() + "\"(#" + crimeIndex + ")");
                 System.out.println("Type \"help\" to get help");
                 editingCrime = new Crime(crime);
             }
@@ -210,8 +213,29 @@ public class ConnectionWorker implements Runnable {
     }
 
     private void editTitle(String arguments) {
-
+        if (Objects.equals(arguments, "")) {
+            System.out.println("Title: " + editingCrime.getTitle());
+        } else {
+            editingCrime.setTitle(arguments);
+            System.out.println("Title set");
+        }
     }
+
+    private void editTime(String arguments) {
+        if (Objects.equals(arguments, "")) {
+
+        } else
+            try {
+                Long crimeIndex = Long.parseLong(arguments);
+
+            } catch (NumberFormatException e) {
+                System.out.println("Please specify crime id");
+            } catch (IndexOutOfBoundsException e) {
+                System.out.println("Crime not found, did you asked crimes from server?");
+            }
+    }
+
+}
 
     // Send command
 
