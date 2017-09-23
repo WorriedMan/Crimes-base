@@ -81,7 +81,7 @@ class CrimesLib {
         }
     }
 
-    Crime getCrimeByUUID(UUID id) {
+    private Crime getCrimeByUUID(UUID id) {
         String idString = id.toString();
         for (Crime crime : mCrimes) {
             if (Objects.equals(crime.getId().toString(), idString)) {
@@ -111,9 +111,6 @@ class CrimesLib {
     void deleteCrime(Crime crime) {
         try {
             Crime crimeOrigin = getCrimeByUUID(crime.getId());
-            System.out.println("UUID "+crime.getId().toString());
-            System.out.println("Origin "+crimeOrigin);
-            System.out.println("Index "+mCrimes.indexOf(crimeOrigin));
             mCrimes.remove(crimeOrigin);
             PreparedStatement statement = connection.prepareStatement("DELETE FROM `crimes` WHERE uuid = ?;");
             statement.setString(1, crime.getId().toString());
@@ -125,13 +122,20 @@ class CrimesLib {
     }
 
     void updateCrime(Crime crime) {
-        mCrimes.remove(crime);
         try {
+            Crime crimeOrigin = getCrimeByUUID(crime.getId());
+            if (crimeOrigin != null) {
+                crimeOrigin.setTitle(crime.getTitle());
+                crimeOrigin.setDate(crime.getDate().getTime());
+                crimeOrigin.setSolved(crime.isSolved());
+                crimeOrigin.setPolice(crime.needPolice());
+            }
             PreparedStatement statement = connection.prepareStatement("UPDATE `crimes` SET title = ?, date = ?, solved = ?, police = ? WHERE uuid = ?;");
             statement.setString(1, crime.getTitle());
             statement.setLong(2, crime.getDate().getTime());
             statement.setShort(3, (short) (crime.isSolved() ? 1 : 0));
             statement.setShort(4, (short) (crime.needPolice() ? 1 : 0));
+            statement.setString(5, crime.getId().toString());
             statement.execute();
         } catch (SQLException e) {
             e.printStackTrace();

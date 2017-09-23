@@ -42,7 +42,7 @@ public class Crime implements Serializable {
     }
 
     boolean needPolice() {
-        return false;
+        return mNeedPolice;
     }
 
     void setPolice(boolean police) {

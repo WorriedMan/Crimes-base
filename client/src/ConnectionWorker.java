@@ -24,6 +24,7 @@ public class ConnectionWorker implements Runnable {
 
     @Override
     public void run() {
+        readyToEnterCommand();
         while (true) {
             try {
                 Thread.sleep(500);
@@ -45,15 +46,18 @@ public class ConnectionWorker implements Runnable {
         commandByte = CriminalUtils.trimBytes(commandByte);
         String command = new String(commandByte, "UTF-8");
         if (!Objects.equals(command, "PING")) {
-            System.out.println("Command: " + command);
+//            System.out.println("Command REC: " + command);
         }
         proceedServerCommand(command);
     }
 
     private void proceedServerCommand(String command) throws IOException {
         switch (command) {
+            case "CRIMEN":
+                getCrimesFromServer(false);
+                break;
             case "CRIMES":
-                getCrimesFromServer();
+                getCrimesFromServer(true);
                 break;
             case "CRIME":
                 printCrime();
@@ -70,7 +74,7 @@ public class ConnectionWorker implements Runnable {
         }
     }
 
-    private void getCrimesFromServer() throws IOException {
+    private void getCrimesFromServer(boolean show) throws IOException {
         mCrimes = new ArrayList<>();
         byte[] commandByte = new byte[6];
         mInputStream.read(commandByte);
@@ -83,8 +87,9 @@ public class ConnectionWorker implements Runnable {
             commandByte = CriminalUtils.trimBytes(commandByte);
             message = new String(commandByte, "UTF-8");
         }
-        if (mMode != MODE_EDIT_CRIME) {
+        if (mMode != MODE_EDIT_CRIME && show) {
             printAllCrimes();
+            readyToEnterCommand();
         }
         mAnswerWaiting = false;
     }
@@ -124,6 +129,18 @@ public class ConnectionWorker implements Runnable {
                 case "time":
                     editTime(arguments);
                     break;
+                case "solved":
+                    editSolved(arguments);
+                    break;
+                case "police":
+                    editPolice(arguments);
+                    break;
+                case "save":
+                    saveEditedCrime();
+                    break;
+                case "close":
+                    closeEditMode();
+                    break;
                 case "help":
                     System.out.println("Editing crime commands:");
                     System.out.println("title [new title] - shows title or changes title to new");
@@ -132,7 +149,8 @@ public class ConnectionWorker implements Runnable {
                     System.out.println("police [0-1] - shows police needing or sets it");
                     System.out.println("save - updates crime on server and closes editing mode");
                     System.out.println("close - discard changes and closes editing mode");
-                    break;
+                default:
+                    readyToEnterCommand();
             }
         } else {
             switch (command) {
@@ -159,17 +177,28 @@ public class ConnectionWorker implements Runnable {
                     System.out.println("Criminal client commands:");
                     System.out.println("crimes - get all crimes from server");
                     System.out.println("create [crime title] - creates new crime");
+                    System.out.println("edit [crime #] - stars edit crime mode");
                     System.out.println("delete [crime #] - deletes crime");
                     System.out.println("bye - shutdown");
-                    break;
+                default:
+                    readyToEnterCommand();
 
             }
+        }
+    }
+
+    private void readyToEnterCommand() {
+        if (mMode == MODE_DEFAULT) {
+            System.out.print("Command: ");
+        } else {
+            System.out.print("> ");
         }
     }
 
     private void createCrime(String arguments) {
         if (Objects.equals(arguments, "")) {
             System.out.println("Please specify crime title");
+            readyToEnterCommand();
             return;
         }
         Crime crime = new Crime();
@@ -188,8 +217,10 @@ public class ConnectionWorker implements Runnable {
             }
         } catch (NumberFormatException e) {
             System.out.println("Please specify crime id");
+            readyToEnterCommand();
         } catch (IndexOutOfBoundsException e) {
             System.out.println("Crime not found, did you asked crimes from server?");
+            readyToEnterCommand();
         }
     }
 
@@ -204,38 +235,99 @@ public class ConnectionWorker implements Runnable {
                 System.out.println("Editing crime \"" + crime.getTitle() + "\"(#" + crimeIndex + ")");
                 System.out.println("Type \"help\" to get help");
                 editingCrime = new Crime(crime);
+                readyToEnterCommand();
             }
         } catch (NumberFormatException e) {
             System.out.println("Please specify crime id");
+            readyToEnterCommand();
         } catch (IndexOutOfBoundsException e) {
             System.out.println("Crime not found, did you asked crimes from server?");
+            readyToEnterCommand();
         }
+    }
+
+
+    private void saveEditedCrime() {
+        sendCommand("UPDATE", editingCrime);
+        System.out.println("Crime saved");
+        closeEditMode();
+    }
+
+    private void closeEditMode() {
+        mMode = MODE_DEFAULT;
+        editingCrime = null;
+        System.out.println("Editing crime mode closed");
+        readyToEnterCommand();
     }
 
     private void editTitle(String arguments) {
         if (Objects.equals(arguments, "")) {
             System.out.println("Title: " + editingCrime.getTitle());
+            readyToEnterCommand();
         } else {
             editingCrime.setTitle(arguments);
             System.out.println("Title set");
+            readyToEnterCommand();
         }
     }
 
     private void editTime(String arguments) {
         if (Objects.equals(arguments, "")) {
-
-        } else
+            String dateString = new SimpleDateFormat("yyyy-MM-dd hh:mm:ss").format(editingCrime.getDate());
+            System.out.println("Date and time: " + dateString);
+            readyToEnterCommand();
+        } else {
             try {
-                Long crimeIndex = Long.parseLong(arguments);
-
+                Long crimeTimestamp = Long.parseLong(arguments);
+                editingCrime.setDate(crimeTimestamp*1000);
+                System.out.println("Timestamp set");
+                readyToEnterCommand();
             } catch (NumberFormatException e) {
-                System.out.println("Please specify crime id");
-            } catch (IndexOutOfBoundsException e) {
-                System.out.println("Crime not found, did you asked crimes from server?");
+                System.out.println("Wrong timestamp");
+                readyToEnterCommand();
             }
+        }
     }
 
-}
+    private void editSolved(String arguments) {
+        if (Objects.equals(arguments, "")) {
+            System.out.println("Solved: " + (editingCrime.isSolved() ? "true" : "false"));
+            readyToEnterCommand();
+        } else {
+            try {
+                Byte solvedByte = Byte.parseByte(arguments);
+                if (solvedByte != 0 && solvedByte != 1) {
+                    throw new NumberFormatException();
+                }
+                editingCrime.setSolved(solvedByte == 1);
+                System.out.println("Solved state set");
+                readyToEnterCommand();
+            } catch (NumberFormatException e) {
+                System.out.println("Wrong solved state (must be either 0 or 1)");
+                readyToEnterCommand();
+            }
+        }
+    }
+
+    private void editPolice(String arguments) {
+        if (Objects.equals(arguments, "")) {
+            System.out.println("Police needed: " + (editingCrime.needPolice() ? "true" : "false"));
+            readyToEnterCommand();
+        } else {
+            try {
+                Byte policeByte = Byte.parseByte(arguments);
+                if (policeByte != 0 && policeByte != 1) {
+                    throw new NumberFormatException();
+                }
+                editingCrime.setPolice(policeByte == 1);
+                System.out.println("Police needing state set");
+                readyToEnterCommand();
+            } catch (NumberFormatException e) {
+                System.out.println("Wrong police needing state (must be either 0 or 1)");
+                readyToEnterCommand();
+            }
+        }
+    }
 
     // Send command
 

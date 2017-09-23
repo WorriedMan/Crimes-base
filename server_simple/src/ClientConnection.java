@@ -1,7 +1,6 @@
 import java.io.*;
 import java.net.Socket;
 import java.nio.ByteBuffer;
-import java.util.Arrays;
 import java.util.Objects;
 
 public class ClientConnection implements Runnable {
@@ -76,7 +75,7 @@ public class ClientConnection implements Runnable {
     private void proceedCommand(String command) throws IOException {
         switch (command) {
             case "CRIMES":
-                sendCrimes();
+                sendCrimes(true);
                 break;
             case "PONG":
                 mPingReceived = true;
@@ -86,14 +85,21 @@ public class ClientConnection implements Runnable {
                 if (crime != null) {
                     CrimesLib.getInstance().addCrime(crime);
                 }
-                sendCrimes();
+                sendCrimes(true);
+                break;
+            case "UPDATE":
+                Crime updcrime = CriminalUtils.readCrime(dataInput);
+                if (updcrime != null) {
+                    CrimesLib.getInstance().updateCrime(updcrime);
+                }
+                sendCrimes(false);
                 break;
             case "DELETE":
                 Crime delcrime = CriminalUtils.readCrime(dataInput);
                 if (delcrime != null) {
                     CrimesLib.getInstance().deleteCrime(delcrime);
                 }
-                sendCrimes();
+                sendCrimes(true);
                 break;
             case "BYE":
                 System.out.println("Client " + clientSocket.getInetAddress() + " has said goodbye");
@@ -102,8 +108,12 @@ public class ClientConnection implements Runnable {
         }
     }
 
-    private void sendCrimes() throws IOException {
-        sendCommand("CRIMES");
+    private void sendCrimes(boolean show) throws IOException {
+        if (!show) {
+            sendCommand("CRIMEN");
+        } else {
+            sendCommand("CRIMES");
+        }
         for (Crime crime : CrimesLib.getInstance().getCrimes()) {
             sendCommand("CRIME", crime);
         }
