@@ -35,14 +35,12 @@ public class CriminalClient {
                 }
             }
         }
-        System.out.println("WHA");
         boolean encryption = false;
         Path filePath = Paths.get("kfile");
         if (Files.exists(filePath)) {
             encryption = loadKeys(filePath);
         } else {
             try {
-                System.out.println("PRe file");
                 Files.createFile(filePath);
                 encryption = createKeys(filePath);
             } catch (IOException e) {
@@ -68,7 +66,6 @@ public class CriminalClient {
 
     private static boolean createKeys(Path filePath) {
         try {
-            System.out.println("Creating file");
             KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("RSA");
             keyPairGenerator.initialize(1024);
             KeyPair keyPair = keyPairGenerator.genKeyPair();
@@ -78,8 +75,10 @@ public class CriminalClient {
             byte[] privateKeyBytes = privateKey.getEncoded();
             Files.write(filePath,publicKeyBytes);
             Files.write(filePath,privateKeyBytes);
-            System.out.println("cpub " + publicKey.getFormat());
-            System.out.println("cpriv " + privateKey.getFormat());
+            System.out.println("cpub " + Arrays.toString(publicKey.getEncoded()));
+            System.out.println("cpub len " + publicKey.getEncoded().length);
+            System.out.println("cpriv " + Arrays.toString(privateKey.getEncoded()));
+            System.out.println("cpriv len " + privateKey.getEncoded().length);
             return true;
         } catch (IOException | NoSuchAlgorithmException e) {
             return false;

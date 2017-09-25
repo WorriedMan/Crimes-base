@@ -1,6 +1,4 @@
 .idea/
-.idea/workspace.xml
 out/
-.idea/workspace.xml
 *.iml
-*.iml
+*.kkey
