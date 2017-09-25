@@ -14,11 +14,12 @@ public class ServerSimple {
             ServerSocket ssock = new ServerSocket(port);
             System.out.println("Listening");
             CrimesLib crimesLib = CrimesLib.getInstance();
+            KeysUtils keys = new KeysUtils();
             while (true) {
                 Thread.sleep(500);
                 Socket sock = ssock.accept();
                 System.out.println("Connected " + sock.getInetAddress());
-                Runnable clientConnection = new ClientConnection(sock);
+                Runnable clientConnection = new ClientConnection(sock, keys);
                 executor.execute(clientConnection);
             }
         } catch (Exception x) {

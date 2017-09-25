@@ -10,10 +10,12 @@ public class ClientConnection implements Runnable {
     private boolean connectionOnline;
     private boolean mPingReceived;
     private long mPingSendedTime;
+    private KeysUtils mKeys;
 
-    ClientConnection(Socket socket) {
+    ClientConnection(Socket socket, KeysUtils keys) {
         this.clientSocket = socket;
         connectionOnline = true;
+        mKeys = keys;
     }
 
     private void closeConnection() {

@@ -10,6 +10,7 @@ public class ConnectionWorker implements Runnable {
     private final String ANSI_RED_BACKGROUND = "\u001B[41m";
     private DataInputStream mInputStream;
     private DataOutputStream mOutputStream;
+    private KeysUtils mKeys;
     private boolean mAnswerWaiting;
     private final byte MODE_DEFAULT = 0;
     private final byte MODE_EDIT_CRIME = 1;
@@ -17,9 +18,10 @@ public class ConnectionWorker implements Runnable {
     private ArrayList<Crime> mCrimes;
     private Crime editingCrime;
 
-    ConnectionWorker(DataInputStream inStream, DataOutputStream outStream) {
+    ConnectionWorker(DataInputStream inStream, DataOutputStream outStream, KeysUtils keys) {
         mInputStream = inStream;
         mOutputStream = outStream;
+        mKeys = keys;
     }
 
     @Override
