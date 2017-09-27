@@ -1,27 +1,34 @@
+import javax.crypto.BadPaddingException;
+import javax.crypto.Cipher;
+import javax.crypto.IllegalBlockSizeException;
+import javax.crypto.NoSuchPaddingException;
+import javax.crypto.spec.SecretKeySpec;
 import java.io.*;
 import java.net.Socket;
 import java.nio.ByteBuffer;
+import java.security.*;
 import java.util.Objects;
 
 public class ClientConnection implements Runnable {
-    private Socket clientSocket;
-    private DataInputStream dataInput;
+    private Socket mClientSocket;
+    private DataInputStream mDataInput;
     private DataOutputStream dataOutput;
     private boolean connectionOnline;
     private boolean mPingReceived;
     private long mPingSendedTime;
     private KeysUtils mKeys;
+    private boolean mEncryption;
 
     ClientConnection(Socket socket, KeysUtils keys) {
-        this.clientSocket = socket;
+        this.mClientSocket = socket;
         connectionOnline = true;
         mKeys = keys;
     }
 
     private void closeConnection() {
         try {
-            System.out.println("Connection closed with " + clientSocket.getInetAddress());
-            clientSocket.close();
+            System.out.println("Connection closed with " + mClientSocket.getInetAddress());
+            mClientSocket.close();
             connectionOnline = false;
         } catch (IOException e) {
             e.printStackTrace();
@@ -30,9 +37,9 @@ public class ClientConnection implements Runnable {
 
     public void run() {
         try {
-            InputStream sin = clientSocket.getInputStream();
-            OutputStream sout = clientSocket.getOutputStream();
-            dataInput = new DataInputStream(sin);
+            InputStream sin = mClientSocket.getInputStream();
+            OutputStream sout = mClientSocket.getOutputStream();
+            mDataInput = new DataInputStream(sin);
             dataOutput = new DataOutputStream(sout);
             mPingSendedTime = System.currentTimeMillis();
             mPingReceived = true;
@@ -42,13 +49,13 @@ public class ClientConnection implements Runnable {
                 } catch (InterruptedException ignored) {
 
                 }
-                if (dataInput.available() > 0) {
+                if (mDataInput.available() > 0) {
                     byte[] commandByte = new byte[6];
-                    dataInput.read(commandByte);
+                    mDataInput.read(commandByte);
                     commandByte = CriminalUtils.trimBytes(commandByte);
                     String command = new String(commandByte, "UTF-8");
                     if (!Objects.equals(command, "PONG")) {
-                        System.out.println("Command: " + command);
+//                        System.out.println("Command: " + command);
                     }
                     proceedCommand(command);
                 } else {
@@ -68,7 +75,7 @@ public class ClientConnection implements Runnable {
                 sendCommand("PING");
             } else {
                 connectionOnline = false;
-                System.out.println("Connection timeout");
+                System.out.println("Connection timeout (client: "+mClientSocket.getInetAddress()+")");
             }
         }
 
@@ -76,37 +83,68 @@ public class ClientConnection implements Runnable {
 
     private void proceedCommand(String command) throws IOException {
         switch (command) {
-            case "CRIMES":
-                sendCrimes(true);
+            case "HELLO":
+                if (mKeys.isEnabled()) {
+                    sendCommand("HELLOK", mKeys.getPublic());
+                } else {
+                    sendCommand("HELLO");
+                }
+                break;
+            case "PKEY":
+                receiveClientKey();
+                break;
+            case "ENCDIS":
+                mEncryption = false;
                 break;
             case "PONG":
                 mPingReceived = true;
                 break;
+            case "CRIMES":
+                sendCrimes(true);
+                break;
             case "ADD":
-                Crime crime = CriminalUtils.readCrime(dataInput);
+                Crime crime = CriminalUtils.readCrime(mDataInput, mKeys, mEncryption);
                 if (crime != null) {
                     CrimesLib.getInstance().addCrime(crime);
                 }
                 sendCrimes(true);
                 break;
             case "UPDATE":
-                Crime updcrime = CriminalUtils.readCrime(dataInput);
+                Crime updcrime = CriminalUtils.readCrime(mDataInput, mKeys, mEncryption);
                 if (updcrime != null) {
                     CrimesLib.getInstance().updateCrime(updcrime);
                 }
                 sendCrimes(false);
                 break;
             case "DELETE":
-                Crime delcrime = CriminalUtils.readCrime(dataInput);
+                Crime delcrime = CriminalUtils.readCrime(mDataInput, mKeys, mEncryption);
                 if (delcrime != null) {
                     CrimesLib.getInstance().deleteCrime(delcrime);
                 }
                 sendCrimes(true);
                 break;
             case "BYE":
-                System.out.println("Client " + clientSocket.getInetAddress() + " has said goodbye");
-                clientSocket.close();
+                System.out.println("Client " + mClientSocket.getInetAddress() + " has said goodbye");
+                mClientSocket.close();
                 break;
+        }
+    }
+
+    private void receiveClientKey() {
+        try {
+            byte[] lengthHeader = new byte[4];
+            mDataInput.read(lengthHeader);
+            int dataSize = ByteBuffer.wrap(lengthHeader).getInt();
+            byte[] body = new byte[dataSize];
+            mDataInput.read(body);
+            body = mKeys.decryptServer(body);
+            Key key = new SecretKeySpec(body, 0, body.length, "AES");
+            mKeys.setClientSecret(key);
+            mEncryption = true;
+            sendCommand("KTEST", "SUCCESS");
+        } catch (Exception e) {
+            e.printStackTrace();
+            mEncryption = false;
         }
     }
 
@@ -122,28 +160,52 @@ public class ClientConnection implements Runnable {
         sendCommand("CSEND");
     }
 
-    private void sendCommand(String command) throws IOException {
+    private void sendCommand(String command) {
         final byte[] bodyBytes;
-        bodyBytes = command.getBytes("UTF-8");
-        ByteBuffer headerBuffer = ByteBuffer.allocate(6).put(bodyBytes);
-        byte[] message = headerBuffer.array();
-        dataOutput.write(message);
-        dataOutput.flush();
-    }
-
-    private void sendCommand(String command, Crime crime) throws IOException {
-        final byte[] bodyBytes;
-        bodyBytes = command.getBytes("UTF-8");
-        ByteBuffer headerBuffer = ByteBuffer.allocate(6).put(bodyBytes);
-        headerBuffer.position(0);
-        byte[] crimeBytes = CriminalUtils.serialize(crime);
-        ByteBuffer lengthBuffer = ByteBuffer.allocate(4).putInt(crimeBytes.length);
-        lengthBuffer.position(0);
-        byte[] header = headerBuffer.array();
-        byte[] message = ByteBuffer.allocate(10 + crimeBytes.length).put(header).put(lengthBuffer.array()).put(crimeBytes).array();
-        dataOutput.write(message);
-        if (command != "CRIME") {
+        try {
+            bodyBytes = command.getBytes("UTF-8");
+            ByteBuffer headerBuffer = ByteBuffer.allocate(6).put(bodyBytes);
+            byte[] message = headerBuffer.array();
+            dataOutput.write(message);
             dataOutput.flush();
+        } catch (Exception e) {
+            e.printStackTrace();
         }
     }
+
+    private void sendCommand(String command, Crime crime) {
+        sendCommand(command, (Object) crime);
+    }
+
+    private void sendCommand(String command, Object object) {
+        try {
+            byte[] crimeBytes = CriminalUtils.serialize(object);
+            if (mEncryption) {
+                sendBytes(command, mKeys.encrypt(crimeBytes));
+            } else {
+                sendBytes(command, crimeBytes);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void sendBytes(String command, byte[] bytes) {
+        try {
+            final byte[] bodyBytes = command.getBytes("UTF-8");
+            ByteBuffer headerBuffer = ByteBuffer.allocate(6).put(bodyBytes);
+            headerBuffer.position(0);
+            ByteBuffer lengthBuffer = ByteBuffer.allocate(4).putInt(bytes.length);
+            lengthBuffer.position(0);
+            byte[] header = headerBuffer.array();
+            byte[] message = ByteBuffer.allocate(10 + bytes.length).put(header).put(lengthBuffer.array()).put(bytes).array();
+            dataOutput.write(message);
+            if (!Objects.equals(command, "CRIME")) {
+                dataOutput.flush();
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
 }

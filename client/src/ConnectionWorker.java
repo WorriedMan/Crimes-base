@@ -1,7 +1,9 @@
+import javax.crypto.Cipher;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.security.PublicKey;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Objects;
@@ -10,23 +12,23 @@ public class ConnectionWorker implements Runnable {
     private final String ANSI_RED_BACKGROUND = "\u001B[41m";
     private DataInputStream mInputStream;
     private DataOutputStream mOutputStream;
-    private KeysUtils mKeys;
     private boolean mAnswerWaiting;
     private final byte MODE_DEFAULT = 0;
     private final byte MODE_EDIT_CRIME = 1;
     private byte mMode = 0;
     private ArrayList<Crime> mCrimes;
     private Crime editingCrime;
+    private ClientKeysUtils mClientKeys;
 
-    ConnectionWorker(DataInputStream inStream, DataOutputStream outStream, KeysUtils keys) {
+    ConnectionWorker(DataInputStream inStream, DataOutputStream outStream) {
         mInputStream = inStream;
         mOutputStream = outStream;
-        mKeys = keys;
+        mClientKeys = new ClientKeysUtils();
     }
 
     @Override
     public void run() {
-        readyToEnterCommand();
+        sendCommand("HELLO");
         while (true) {
             try {
                 Thread.sleep(500);
@@ -50,11 +52,25 @@ public class ConnectionWorker implements Runnable {
         if (!Objects.equals(command, "PING")) {
 //            System.out.println("Command REC: " + command);
         }
-        proceedServerCommand(command);
+        try {
+            proceedServerCommand(command);
+        } catch (ClassNotFoundException e) {
+            e.printStackTrace();
+        }
     }
 
-    private void proceedServerCommand(String command) throws IOException {
+    private void proceedServerCommand(String command) throws IOException, ClassNotFoundException {
         switch (command) {
+            case "HELLOK":
+                proceedKeysExchange();
+                break;
+            case "HELLO":
+                System.out.println("Server said that encryption is disabled");
+                readyToEnterCommand();
+                break;
+            case "KTEST":
+                checkTestKeys();
+                break;
             case "CRIMEN":
                 getCrimesFromServer(false);
                 break;
@@ -73,6 +89,44 @@ public class ConnectionWorker implements Runnable {
             case "PING":
                 sendCommand("PONG");
                 break;
+        }
+    }
+
+    private void checkTestKeys() throws IOException, ClassNotFoundException {
+        byte[] lengthHeader = new byte[4];
+        mInputStream.read(lengthHeader);
+        int dataSize = ByteBuffer.wrap(lengthHeader).getInt();
+        byte[] body = new byte[dataSize];
+        mInputStream.read(body);
+        body = mClientKeys.decrypt(body);
+        String message = (String) CriminalUtils.deserialize(body);
+        if (message != null && Objects.equals(message, "SUCCESS")) {
+            System.out.println("Keys test success. Encryption enabled!");
+            mClientKeys.setEnabled(true);
+        } else {
+            mClientKeys.setEnabled(false);
+            System.out.println("Keys test failed. Encryption disabled.");
+            sendCommand("ENCDIS");
+        }
+        readyToEnterCommand();
+    }
+
+    private void proceedKeysExchange() throws IOException, ClassNotFoundException {
+        byte[] lengthHeader = new byte[4];
+        mInputStream.read(lengthHeader);
+        int dataSize = ByteBuffer.wrap(lengthHeader).getInt();
+        byte[] body = new byte[dataSize];
+        mInputStream.read(body);
+        PublicKey serverPublicKey = (PublicKey) CriminalUtils.deserialize(body);
+        mClientKeys.setServerPublicKey(serverPublicKey);
+
+        try {
+            Cipher cipher = Cipher.getInstance("RSA");
+            cipher.init(Cipher.ENCRYPT_MODE, mClientKeys.getServerPublicKey());
+            byte[] cipherData = cipher.doFinal(mClientKeys.getKey().getEncoded());
+            sendBytes("PKEY", cipherData);
+        } catch (Exception e) {
+            e.printStackTrace();
         }
     }
 
@@ -97,7 +151,7 @@ public class ConnectionWorker implements Runnable {
     }
 
     private void printCrime() throws IOException {
-        Crime crime = CriminalUtils.readCrime(mInputStream);
+        Crime crime = CriminalUtils.readCrime(mInputStream, mClientKeys);
         if (crime != null) {
             mCrimes.add(crime);
         }
@@ -281,7 +335,7 @@ public class ConnectionWorker implements Runnable {
         } else {
             try {
                 Long crimeTimestamp = Long.parseLong(arguments);
-                editingCrime.setDate(crimeTimestamp*1000);
+                editingCrime.setDate(crimeTimestamp * 1000);
                 System.out.println("Timestamp set");
                 readyToEnterCommand();
             } catch (NumberFormatException e) {
@@ -347,19 +401,34 @@ public class ConnectionWorker implements Runnable {
     }
 
     private void sendCommand(String command, Crime crime) {
-        final byte[] bodyBytes;
+        sendCommand(command, (Object) crime);
+    }
+
+    private void sendCommand(String command, Object object) {
         try {
-            bodyBytes = command.getBytes("UTF-8");
+            byte[] crimeBytes = CriminalUtils.serialize(object);
+            if (mClientKeys.isEnabled()) {
+                sendBytes(command, mClientKeys.encrypt(crimeBytes));
+            } else {
+                sendBytes(command, crimeBytes);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void sendBytes(String command, byte[] bytes) {
+        try {
+            final byte[] bodyBytes = command.getBytes("UTF-8");
             ByteBuffer headerBuffer = ByteBuffer.allocate(6).put(bodyBytes);
             headerBuffer.position(0);
-            byte[] crimeBytes = CriminalUtils.serialize(crime);
-            ByteBuffer lengthBuffer = ByteBuffer.allocate(4).putInt(crimeBytes.length);
+            ByteBuffer lengthBuffer = ByteBuffer.allocate(4).putInt(bytes.length);
             lengthBuffer.position(0);
             byte[] header = headerBuffer.array();
-            byte[] message = ByteBuffer.allocate(10 + crimeBytes.length).put(header).put(lengthBuffer.array()).put(crimeBytes).array();
+            byte[] message = ByteBuffer.allocate(10 + bytes.length).put(header).put(lengthBuffer.array()).put(bytes).array();
             mOutputStream.write(message);
             mOutputStream.flush();
-        } catch (Exception e) {
+        } catch (IOException e) {
             e.printStackTrace();
         }
     }

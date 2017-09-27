@@ -1,8 +1,5 @@
-import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.nio.ByteBuffer;
-import java.util.Arrays;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -15,6 +12,7 @@ public class ServerSimple {
             System.out.println("Listening");
             CrimesLib crimesLib = CrimesLib.getInstance();
             KeysUtils keys = new KeysUtils();
+            keys.setEnabled(false);
             while (true) {
                 Thread.sleep(500);
                 Socket sock = ssock.accept();

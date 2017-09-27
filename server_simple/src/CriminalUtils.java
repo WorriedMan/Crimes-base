@@ -35,18 +35,22 @@ public final class CriminalUtils {
         return bytes;
     }
 
-    private static Object deserialize(byte[] data) throws IOException, ClassNotFoundException {
+    static Object deserialize(byte[] data) throws IOException, ClassNotFoundException {
         ByteArrayInputStream in = new ByteArrayInputStream(data);
         ObjectInputStream is = new ObjectInputStream(in);
         return is.readObject();
     }
 
     static byte[] serialize(Crime crime) throws IOException {
+        return serialize((Object) crime);
+    }
+
+    static byte[] serialize(Object object) throws IOException {
         ByteArrayOutputStream bos = new ByteArrayOutputStream();
         ObjectOutput out;
         try {
             out = new ObjectOutputStream(bos);
-            out.writeObject(crime);
+            out.writeObject(object);
             out.flush();
             return bos.toByteArray();
         } finally {
@@ -54,13 +58,16 @@ public final class CriminalUtils {
         }
     }
 
-    static Crime readCrime(DataInputStream stream) {
+    static Crime readCrime(DataInputStream stream, KeysUtils keys, boolean encryption) {
         try {
             byte[] lengthHeader = new byte[4];
             stream.read(lengthHeader);
             int dataSize = ByteBuffer.wrap(lengthHeader).getInt();
             byte[] body = new byte[dataSize];
             stream.read(body);
+            if (encryption) {
+                body = keys.decrypt(body);
+            }
             Crime crime = (Crime) CriminalUtils.deserialize(body);
             return crime;
         } catch (ClassNotFoundException | IOException e) {

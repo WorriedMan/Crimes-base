@@ -37,16 +37,12 @@ public class CriminalClient {
                 }
             }
         }
-        KeysUtils keys = new KeysUtils();
-        if (keys.isEnabled()) {
-            System.out.println("Encryption is enabled");
-        }
         System.out.println("Connecting to server...");
         try {
             while (!establishConnectionToServer(ip, port)) {
                 TimeUnit.SECONDS.sleep(5);
             }
-            mWorker = new ConnectionWorker(mInputStream, mOutputStream, keys);
+            mWorker = new ConnectionWorker(mInputStream, mOutputStream);
             Thread workerThread = new Thread(mWorker);
             workerThread.start();
             runMainConnection();
