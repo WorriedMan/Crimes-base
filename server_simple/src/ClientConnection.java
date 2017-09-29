@@ -18,6 +18,7 @@ public class ClientConnection implements Runnable {
     private long mPingSendedTime;
     private KeysUtils mKeys;
     private boolean mEncryption;
+    private boolean mLl;
 
     ClientConnection(Socket socket, KeysUtils keys) {
         this.mClientSocket = socket;
