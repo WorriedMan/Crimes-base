@@ -7,15 +7,16 @@ import java.util.concurrent.ThreadLocalRandom;
 
 class CrimesLib {
     private static volatile CrimesLib instance;
-    private volatile ArrayList<Crime> mCrimes;
+    private volatile CrimesMap mCrimes;
     private Connection connection;
 
     private CrimesLib() {
-        mCrimes = new ArrayList<>();
+        mCrimes = new CrimesMap();
         connect();
         try {
             Statement statement = connection.createStatement();
             ResultSet result = statement.executeQuery("SELECT uuid, title, date, solved, police FROM `crimes`");
+            int pos = 1;
             while (result.next()) {
                 String uuid = result.getString("uuid");
                 String title = result.getString("title");
@@ -28,7 +29,8 @@ class CrimesLib {
                 crime.setDate(date);
                 crime.setSolved(solved == 1);
                 crime.setPolice(police == 1);
-                mCrimes.add(crime);
+                crime.setPosition(pos++);
+                mCrimes.put(crime.getId(),crime);
             }
             System.out.println("Total loaded crimes: " + mCrimes.size());
         } catch (SQLException e) {
@@ -50,7 +52,7 @@ class CrimesLib {
 //        }
     }
 
-    ArrayList<Crime> getCrimes() {
+    CrimesMap getCrimes() {
         return mCrimes;
     }
 
@@ -82,13 +84,7 @@ class CrimesLib {
     }
 
     private Crime getCrimeByUUID(UUID id) {
-        String idString = id.toString();
-        for (Crime crime : mCrimes) {
-            if (Objects.equals(crime.getId().toString(), idString)) {
-                return crime;
-            }
-        }
-        return null;
+        return mCrimes.get(id);
     }
 
     void addCrime(Crime crime) {
@@ -99,8 +95,9 @@ class CrimesLib {
             statement.setLong(3, crime.getDate().getTime());
             statement.setShort(4, (short) (crime.isSolved() ? 1 : 0));
             statement.setShort(5, (short) (crime.needPolice() ? 1 : 0));
+            crime.setPosition(mCrimes.getNewCrimeId());
             statement.execute();
-            mCrimes.add(crime);
+            mCrimes.put(crime.getId(),crime);
             System.out.println("Saved crime " + crime.getTitle() + "(" + crime.getId() + "). Solved: " + ((byte) (crime.isSolved() ? 1 : 0)));
         } catch (SQLException e) {
             e.printStackTrace();
@@ -110,8 +107,7 @@ class CrimesLib {
 
     void deleteCrime(Crime crime) {
         try {
-            Crime crimeOrigin = getCrimeByUUID(crime.getId());
-            mCrimes.remove(crimeOrigin);
+            mCrimes.remove(crime.getId());
             PreparedStatement statement = connection.prepareStatement("DELETE FROM `crimes` WHERE uuid = ?;");
             statement.setString(1, crime.getId().toString());
             statement.execute();

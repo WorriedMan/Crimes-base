@@ -1,13 +1,14 @@
-import java.io.*;
+import java.io.Serializable;
 import java.util.Date;
 import java.util.UUID;
 
-public class Crime implements Serializable {
+public class Crime implements Serializable, Comparable  {
     private UUID mId;
     private String mTitle;
     private Date mDate;
     private boolean mSolved;
     private boolean mNeedPolice;
+    private int mPosition;
 
     UUID getId() {
         return mId;
@@ -59,5 +60,19 @@ public class Crime implements Serializable {
         mDate = c.getDate();
         mSolved = c.isSolved();
         mNeedPolice = c.needPolice();
+    }
+
+    int getPosition() {
+        return mPosition;
+    }
+
+    void setPosition(int position) {
+        mPosition = position;
+    }
+
+    @Override
+    public int compareTo(Object o) {
+        Crime crime = (Crime) o;
+        return this.getPosition()-crime.getPosition();
     }
 }

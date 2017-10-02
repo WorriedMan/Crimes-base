@@ -1,3 +1,6 @@
+import io.reactivex.ObservableEmitter;
+import io.reactivex.ObservableOnSubscribe;
+
 import javax.crypto.Cipher;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -8,7 +11,7 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Objects;
 
-public class ConnectionWorker implements Runnable {
+public class ConnectionWorker implements ObservableOnSubscribe<CrimesMap> {
     private final String ANSI_RED_BACKGROUND = "\u001B[41m";
     private DataInputStream mInputStream;
     private DataOutputStream mOutputStream;
@@ -16,9 +19,10 @@ public class ConnectionWorker implements Runnable {
     private final byte MODE_DEFAULT = 0;
     private final byte MODE_EDIT_CRIME = 1;
     private byte mMode = 0;
-    private ArrayList<Crime> mCrimes;
+    private CrimesMap mCrimes;
     private Crime editingCrime;
     private ClientKeysUtils mClientKeys;
+    private ObservableEmitter<CrimesMap> mEmitter;
 
     ConnectionWorker(DataInputStream inStream, DataOutputStream outStream) {
         mInputStream = inStream;
@@ -27,8 +31,9 @@ public class ConnectionWorker implements Runnable {
     }
 
     @Override
-    public void run() {
+    public void subscribe(ObservableEmitter<CrimesMap> emitter) throws Exception {
         sendCommand("HELLO");
+        mEmitter = emitter;
         while (true) {
             try {
                 Thread.sleep(500);
@@ -131,7 +136,7 @@ public class ConnectionWorker implements Runnable {
     }
 
     private void getCrimesFromServer(boolean show) throws IOException {
-        mCrimes = new ArrayList<>();
+        mCrimes = new CrimesMap();
         byte[] commandByte = new byte[6];
         mInputStream.read(commandByte);
         commandByte = CriminalUtils.trimBytes(commandByte);
@@ -143,6 +148,7 @@ public class ConnectionWorker implements Runnable {
             commandByte = CriminalUtils.trimBytes(commandByte);
             message = new String(commandByte, "UTF-8");
         }
+        mEmitter.onNext(mCrimes);
         if (mMode != MODE_EDIT_CRIME && show) {
             printAllCrimes();
             readyToEnterCommand();
@@ -153,20 +159,20 @@ public class ConnectionWorker implements Runnable {
     private void printCrime() throws IOException {
         Crime crime = CriminalUtils.readCrime(mInputStream, mClientKeys);
         if (crime != null) {
-            mCrimes.add(crime);
+            mCrimes.put(crime.getId(),crime);
         }
     }
 
     private void printAllCrimes() {
         System.out.println("~~~~~~~~~~~~~~CRIMES LIST~~~~~~~~~~~~~~");
         System.out.println("#_|_______________________Id_______________________|_________Title________|____Date of crime_____");
-        mCrimes.forEach((crime) -> {
+        mCrimes.getSortedList().forEach((crime) -> {
             String dateString = new SimpleDateFormat("yyyy-MM-dd hh:mm:ss").format(crime.getDate());
             StringBuilder crimeString = new StringBuilder();
             if (crime.needPolice()) {
                 crimeString.append(ANSI_RED_BACKGROUND);
             }
-            crimeString.append(mCrimes.indexOf(crime)).append(" | ");
+            crimeString.append(crime.getPosition()).append(" | ");
             crimeString.append("CRIME ID: ").append(crime.getId().toString()).append(" | TITLE: ").append(crime.getTitle()).append(" | ").append(dateString);
             System.out.println(crimeString);
         });
@@ -266,7 +272,7 @@ public class ConnectionWorker implements Runnable {
     private void deleteCrime(String arguments) {
         try {
             Integer crimeIndex = Integer.parseInt(arguments);
-            Crime crime = mCrimes.get(crimeIndex);
+            Crime crime = mCrimes.getCrimeByPosition(crimeIndex);
             if (crime != null) {
                 sendCommand("DELETE", crime);
                 mAnswerWaiting = true;
@@ -285,7 +291,7 @@ public class ConnectionWorker implements Runnable {
     private void startEditMode(String arguments) {
         try {
             Integer crimeIndex = Integer.parseInt(arguments);
-            Crime crime = mCrimes.get(crimeIndex);
+            Crime crime = mCrimes.getCrimeByPosition(crimeIndex);
             if (crime != null) {
                 mMode = MODE_EDIT_CRIME;
                 System.out.println("Editing crime \"" + crime.getTitle() + "\"(#" + crimeIndex + ")");

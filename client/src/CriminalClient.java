@@ -1,31 +1,22 @@
-import com.sun.org.apache.xml.internal.serializer.Encodings;
+import io.reactivex.Observable;
+import io.reactivex.Observer;
+import io.reactivex.schedulers.Schedulers;
 
 import java.io.*;
 import java.net.InetAddress;
 import java.net.Socket;
-import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.security.*;
-import java.security.spec.InvalidKeySpecException;
-import java.security.spec.PKCS8EncodedKeySpec;
-import java.security.spec.X509EncodedKeySpec;
-import java.text.SimpleDateFormat;
-import java.util.*;
+import java.util.Objects;
+import java.util.Scanner;
 import java.util.concurrent.TimeUnit;
 
 public class CriminalClient {
 
-    private static Socket mConnection;
-    private static DataInputStream mInputStream;
-    private static DataOutputStream mOutputStream;
-    private static ConnectionWorker mWorker;
-    private static PrivateKey mPrivateKey;
-    private static PublicKey mPublicKey;
+    private static Socket sConnection;
+    private static DataInputStream sInputStream;
+    private static DataOutputStream sOutputStream;
+    private static ConnectionWorker sConnectionWorker;
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws InterruptedException {
         String ip = "127.0.0.1";
         int port = 8080;
         if (args.length > 0) {
@@ -37,14 +28,19 @@ public class CriminalClient {
                 }
             }
         }
+
+
         System.out.println("Connecting to server...");
         try {
             while (!establishConnectionToServer(ip, port)) {
                 TimeUnit.SECONDS.sleep(5);
             }
-            mWorker = new ConnectionWorker(mInputStream, mOutputStream);
-            Thread workerThread = new Thread(mWorker);
-            workerThread.start();
+            Observer<CrimesMap> observer = new CrimesObserver();
+            sConnectionWorker = new ConnectionWorker(sInputStream, sOutputStream);
+            Observable<CrimesMap> sObservable = Observable.create(sConnectionWorker)
+                    .subscribeOn(Schedulers.io())
+                    .observeOn(Schedulers.single()).doOnComplete(CriminalClient::closeProgram);
+            sObservable.subscribe(observer);
             runMainConnection();
         } catch (Exception ignored) {
 
@@ -54,11 +50,11 @@ public class CriminalClient {
     private static boolean establishConnectionToServer(String address, int serverPort) throws InterruptedException {
         try {
             InetAddress ipAddress = InetAddress.getByName(address);
-            mConnection = new Socket(ipAddress, serverPort);
-            InputStream sin = mConnection.getInputStream();
-            OutputStream sout = mConnection.getOutputStream();
-            mInputStream = new DataInputStream(sin);
-            mOutputStream = new DataOutputStream(sout);
+            sConnection = new Socket(ipAddress, serverPort);
+            InputStream sin = sConnection.getInputStream();
+            OutputStream sout = sConnection.getOutputStream();
+            sInputStream = new DataInputStream(sin);
+            sOutputStream = new DataOutputStream(sout);
             System.out.println("Connected to crimes server " + address + ":" + serverPort);
             return true;
         } catch (Exception x) {
@@ -69,7 +65,7 @@ public class CriminalClient {
 
     private static void runMainConnection() throws IOException, InterruptedException {
         Scanner scanner = new Scanner(System.in);
-        while (mConnection.isConnected()) {
+        while (sConnection.isConnected()) {
             String line = scanner.nextLine();
             if (!Objects.equals(line, "")) {
                 String[] arr = line.split(" ", 2);
@@ -80,10 +76,12 @@ public class CriminalClient {
                 } else {
                     arguments = "";
                 }
-                mWorker.proceedConsoleCommand(command, arguments);
+                sConnectionWorker.proceedConsoleCommand(command, arguments);
             }
         }
     }
 
-
+    private static void closeProgram() {
+        System.exit(0);
+    }
 }

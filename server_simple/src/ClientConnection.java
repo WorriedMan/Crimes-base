@@ -18,7 +18,6 @@ public class ClientConnection implements Runnable {
     private long mPingSendedTime;
     private KeysUtils mKeys;
     private boolean mEncryption;
-    private boolean mLl;
 
     ClientConnection(Socket socket, KeysUtils keys) {
         this.mClientSocket = socket;
@@ -76,7 +75,7 @@ public class ClientConnection implements Runnable {
                 sendCommand("PING");
             } else {
                 connectionOnline = false;
-                System.out.println("Connection timeout (client: "+mClientSocket.getInetAddress()+")");
+                System.out.println("Connection timeout (client: " + mClientSocket.getInetAddress() + ")");
             }
         }
 
@@ -155,9 +154,7 @@ public class ClientConnection implements Runnable {
         } else {
             sendCommand("CRIMES");
         }
-        for (Crime crime : CrimesLib.getInstance().getCrimes()) {
-            sendCommand("CRIME", crime);
-        }
+        CrimesLib.getInstance().getCrimes().forEach((id, crime) -> sendCommand("CRIME", crime));
         sendCommand("CSEND");
     }
 
