@@ -1,9 +1,8 @@
+import com.oegodf.crime.CrimeBase;
+
 import java.sql.*;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.Objects;
 import java.util.UUID;
-import java.util.concurrent.ThreadLocalRandom;
+import com.oegodf.crime.CrimesMap;
 
 class CrimesLib {
     private static volatile CrimesLib instance;
@@ -23,12 +22,12 @@ class CrimesLib {
                 long date = result.getLong("date");
                 short solved = result.getShort("solved");
                 short police = result.getShort("police");
-                Crime crime = new Crime();
+                CrimeBase crime = new CrimeBase();
                 crime.setId(UUID.fromString(uuid));
                 crime.setTitle(title);
                 crime.setDate(date);
                 crime.setSolved(solved == 1);
-                crime.setPolice(police == 1);
+                crime.setNeedPolice(police == 1);
                 crime.setPosition(pos++);
                 mCrimes.put(crime.getId(),crime);
             }
@@ -42,7 +41,7 @@ class CrimesLib {
 //        Date endDate = new Date();
 //        endDate.setTime(1483228800);
 //        for (int i = 1; i < 110; i++) {
-//            Crime crime = new Crime();
+//            CrimeBase crime = new CrimeBase();
 //            long random = ThreadLocalRandom.current().nextLong(startDate.getTime(), endDate.getTime());
 //            crime.setDate(random);
 //            crime.setTitle("Преступление #" + i);
@@ -83,18 +82,18 @@ class CrimesLib {
         }
     }
 
-    private Crime getCrimeByUUID(UUID id) {
+    private CrimeBase getCrimeByUUID(UUID id) {
         return mCrimes.get(id);
     }
 
-    void addCrime(Crime crime) {
+    void addCrime(CrimeBase crime) {
         try {
             PreparedStatement statement = connection.prepareStatement("INSERT INTO `crimes` (uuid,title,date,solved,police) VALUES (?,?,?,?,?)");
             statement.setString(1, crime.getId().toString());
             statement.setString(2, crime.getTitle());
             statement.setLong(3, crime.getDate().getTime());
             statement.setShort(4, (short) (crime.isSolved() ? 1 : 0));
-            statement.setShort(5, (short) (crime.needPolice() ? 1 : 0));
+            statement.setShort(5, (short) (crime.isNeedPolice() ? 1 : 0));
             crime.setPosition(mCrimes.getNewCrimeId());
             statement.execute();
             mCrimes.put(crime.getId(),crime);
@@ -105,7 +104,7 @@ class CrimesLib {
         }
     }
 
-    void deleteCrime(Crime crime) {
+    void deleteCrime(CrimeBase crime) {
         try {
             mCrimes.remove(crime.getId());
             PreparedStatement statement = connection.prepareStatement("DELETE FROM `crimes` WHERE uuid = ?;");
@@ -117,20 +116,20 @@ class CrimesLib {
         }
     }
 
-    void updateCrime(Crime crime) {
+    void updateCrime(CrimeBase crime) {
         try {
-            Crime crimeOrigin = getCrimeByUUID(crime.getId());
+            CrimeBase crimeOrigin = getCrimeByUUID(crime.getId());
             if (crimeOrigin != null) {
                 crimeOrigin.setTitle(crime.getTitle());
                 crimeOrigin.setDate(crime.getDate().getTime());
                 crimeOrigin.setSolved(crime.isSolved());
-                crimeOrigin.setPolice(crime.needPolice());
+                crimeOrigin.setNeedPolice(crime.isNeedPolice());
             }
             PreparedStatement statement = connection.prepareStatement("UPDATE `crimes` SET title = ?, date = ?, solved = ?, police = ? WHERE uuid = ?;");
             statement.setString(1, crime.getTitle());
             statement.setLong(2, crime.getDate().getTime());
             statement.setShort(3, (short) (crime.isSolved() ? 1 : 0));
-            statement.setShort(4, (short) (crime.needPolice() ? 1 : 0));
+            statement.setShort(4, (short) (crime.isNeedPolice() ? 1 : 0));
             statement.setString(5, crime.getId().toString());
             statement.execute();
         } catch (SQLException e) {

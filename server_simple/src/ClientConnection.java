@@ -1,11 +1,11 @@
-import javax.crypto.BadPaddingException;
-import javax.crypto.Cipher;
-import javax.crypto.IllegalBlockSizeException;
-import javax.crypto.NoSuchPaddingException;
+import com.google.gson.Gson;
+import com.oegodf.crime.CrimeBase;
+
 import javax.crypto.spec.SecretKeySpec;
 import java.io.*;
 import java.net.Socket;
 import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
 import java.security.*;
 import java.util.Objects;
 
@@ -18,6 +18,7 @@ public class ClientConnection implements Runnable {
     private long mPingSendedTime;
     private KeysUtils mKeys;
     private boolean mEncryption;
+    private boolean mUseObjectSerialization = true;
 
     ClientConnection(Socket socket, KeysUtils keys) {
         this.mClientSocket = socket;
@@ -90,6 +91,9 @@ public class ClientConnection implements Runnable {
                     sendCommand("HELLO");
                 }
                 break;
+            case "JSON":
+                mUseObjectSerialization = false;
+                break;
             case "PKEY":
                 receiveClientKey();
                 break;
@@ -103,21 +107,21 @@ public class ClientConnection implements Runnable {
                 sendCrimes(true);
                 break;
             case "ADD":
-                Crime crime = CriminalUtils.readCrime(mDataInput, mKeys, mEncryption);
+                CrimeBase crime = CriminalUtils.readCrime(mDataInput, mKeys, mEncryption);
                 if (crime != null) {
                     CrimesLib.getInstance().addCrime(crime);
                 }
                 sendCrimes(true);
                 break;
             case "UPDATE":
-                Crime updcrime = CriminalUtils.readCrime(mDataInput, mKeys, mEncryption);
+                CrimeBase updcrime = CriminalUtils.readCrime(mDataInput, mKeys, mEncryption);
                 if (updcrime != null) {
                     CrimesLib.getInstance().updateCrime(updcrime);
                 }
                 sendCrimes(false);
                 break;
             case "DELETE":
-                Crime delcrime = CriminalUtils.readCrime(mDataInput, mKeys, mEncryption);
+                CrimeBase delcrime = CriminalUtils.readCrime(mDataInput, mKeys, mEncryption);
                 if (delcrime != null) {
                     CrimesLib.getInstance().deleteCrime(delcrime);
                 }
@@ -171,13 +175,19 @@ public class ClientConnection implements Runnable {
         }
     }
 
-    private void sendCommand(String command, Crime crime) {
+    private void sendCommand(String command, CrimeBase crime) {
         sendCommand(command, (Object) crime);
     }
 
     private void sendCommand(String command, Object object) {
         try {
-            byte[] crimeBytes = CriminalUtils.serialize(object);
+            byte[] crimeBytes;
+            if (mUseObjectSerialization) {
+                crimeBytes = CriminalUtils.serialize(object);
+            } else {
+                String objectJson = new Gson().toJson(object);
+                crimeBytes = objectJson.getBytes("UTF-8");
+            }
             if (mEncryption) {
                 sendBytes(command, mKeys.encrypt(crimeBytes));
             } else {

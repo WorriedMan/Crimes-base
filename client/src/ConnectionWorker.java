@@ -1,3 +1,5 @@
+import com.oegodf.crime.CrimeBase;
+import com.oegodf.crime.CrimesMap;
 import io.reactivex.ObservableEmitter;
 import io.reactivex.ObservableOnSubscribe;
 
@@ -8,7 +10,6 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.security.PublicKey;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
 import java.util.Objects;
 
 public class ConnectionWorker implements ObservableOnSubscribe<CrimesMap> {
@@ -20,7 +21,7 @@ public class ConnectionWorker implements ObservableOnSubscribe<CrimesMap> {
     private final byte MODE_EDIT_CRIME = 1;
     private byte mMode = 0;
     private CrimesMap mCrimes;
-    private Crime editingCrime;
+    private CrimeBase editingCrime;
     private ClientKeysUtils mClientKeys;
     private ObservableEmitter<CrimesMap> mEmitter;
 
@@ -32,7 +33,8 @@ public class ConnectionWorker implements ObservableOnSubscribe<CrimesMap> {
 
     @Override
     public void subscribe(ObservableEmitter<CrimesMap> emitter) throws Exception {
-        sendCommand("HELLO");
+//        sendCommand("JSON"); // Устанавливаем, что в подключении будем использовать не сериализацию объекта, а JSON
+        sendCommand("HELLO"); // Обмениваемся ключами
         mEmitter = emitter;
         while (true) {
             try {
@@ -157,7 +159,7 @@ public class ConnectionWorker implements ObservableOnSubscribe<CrimesMap> {
     }
 
     private void printCrime() throws IOException {
-        Crime crime = CriminalUtils.readCrime(mInputStream, mClientKeys);
+        CrimeBase crime = CriminalUtils.readCrime(mInputStream, mClientKeys);
         if (crime != null) {
             mCrimes.put(crime.getId(),crime);
         }
@@ -169,7 +171,7 @@ public class ConnectionWorker implements ObservableOnSubscribe<CrimesMap> {
         mCrimes.getSortedList().forEach((crime) -> {
             String dateString = new SimpleDateFormat("yyyy-MM-dd hh:mm:ss").format(crime.getDate());
             StringBuilder crimeString = new StringBuilder();
-            if (crime.needPolice()) {
+            if (crime.isNeedPolice()) {
                 crimeString.append(ANSI_RED_BACKGROUND);
             }
             crimeString.append(crime.getPosition()).append(" | ");
@@ -263,7 +265,7 @@ public class ConnectionWorker implements ObservableOnSubscribe<CrimesMap> {
             readyToEnterCommand();
             return;
         }
-        Crime crime = new Crime();
+        CrimeBase crime = new CrimeBase();
         crime.setTitle(arguments);
         sendCommand("ADD", crime);
         mAnswerWaiting = true;
@@ -272,7 +274,7 @@ public class ConnectionWorker implements ObservableOnSubscribe<CrimesMap> {
     private void deleteCrime(String arguments) {
         try {
             Integer crimeIndex = Integer.parseInt(arguments);
-            Crime crime = mCrimes.getCrimeByPosition(crimeIndex);
+            CrimeBase crime = mCrimes.getCrimeByPosition(crimeIndex);
             if (crime != null) {
                 sendCommand("DELETE", crime);
                 mAnswerWaiting = true;
@@ -281,7 +283,7 @@ public class ConnectionWorker implements ObservableOnSubscribe<CrimesMap> {
             System.out.println("Please specify crime id");
             readyToEnterCommand();
         } catch (IndexOutOfBoundsException e) {
-            System.out.println("Crime not found, did you asked crimes from server?");
+            System.out.println("CrimeBase not found, did you asked crimes from server?");
             readyToEnterCommand();
         }
     }
@@ -291,19 +293,19 @@ public class ConnectionWorker implements ObservableOnSubscribe<CrimesMap> {
     private void startEditMode(String arguments) {
         try {
             Integer crimeIndex = Integer.parseInt(arguments);
-            Crime crime = mCrimes.getCrimeByPosition(crimeIndex);
+            CrimeBase crime = mCrimes.getCrimeByPosition(crimeIndex);
             if (crime != null) {
                 mMode = MODE_EDIT_CRIME;
                 System.out.println("Editing crime \"" + crime.getTitle() + "\"(#" + crimeIndex + ")");
                 System.out.println("Type \"help\" to get help");
-                editingCrime = new Crime(crime);
+                editingCrime = new CrimeBase(crime);
                 readyToEnterCommand();
             }
         } catch (NumberFormatException e) {
             System.out.println("Please specify crime id");
             readyToEnterCommand();
         } catch (IndexOutOfBoundsException e) {
-            System.out.println("Crime not found, did you asked crimes from server?");
+            System.out.println("CrimeBase not found, did you asked crimes from server?");
             readyToEnterCommand();
         }
     }
@@ -311,7 +313,7 @@ public class ConnectionWorker implements ObservableOnSubscribe<CrimesMap> {
 
     private void saveEditedCrime() {
         sendCommand("UPDATE", editingCrime);
-        System.out.println("Crime saved");
+        System.out.println("CrimeBase saved");
         closeEditMode();
     }
 
@@ -373,7 +375,7 @@ public class ConnectionWorker implements ObservableOnSubscribe<CrimesMap> {
 
     private void editPolice(String arguments) {
         if (Objects.equals(arguments, "")) {
-            System.out.println("Police needed: " + (editingCrime.needPolice() ? "true" : "false"));
+            System.out.println("Police needed: " + (editingCrime.isNeedPolice() ? "true" : "false"));
             readyToEnterCommand();
         } else {
             try {
@@ -381,7 +383,7 @@ public class ConnectionWorker implements ObservableOnSubscribe<CrimesMap> {
                 if (policeByte != 0 && policeByte != 1) {
                     throw new NumberFormatException();
                 }
-                editingCrime.setPolice(policeByte == 1);
+                editingCrime.setNeedPolice(policeByte == 1);
                 System.out.println("Police needing state set");
                 readyToEnterCommand();
             } catch (NumberFormatException e) {
@@ -406,7 +408,7 @@ public class ConnectionWorker implements ObservableOnSubscribe<CrimesMap> {
         }
     }
 
-    private void sendCommand(String command, Crime crime) {
+    private void sendCommand(String command, CrimeBase crime) {
         sendCommand(command, (Object) crime);
     }
 

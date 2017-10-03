@@ -1,3 +1,4 @@
+import com.oegodf.crime.CrimesMap;
 import io.reactivex.Observer;
 import io.reactivex.disposables.Disposable;
 

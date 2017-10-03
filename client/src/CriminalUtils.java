@@ -1,3 +1,5 @@
+import com.oegodf.crime.CrimeBase;
+
 import java.io.*;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -41,7 +43,7 @@ public final class CriminalUtils {
         return is.readObject();
     }
 
-    static byte[] serialize(Crime crime) throws IOException {
+    static byte[] serialize(CrimeBase crime) throws IOException {
         return serialize((Object) crime);
     }
 
@@ -58,7 +60,7 @@ public final class CriminalUtils {
         }
     }
 
-    static Crime readCrime(DataInputStream stream, ClientKeysUtils keysUtils) {
+    static CrimeBase readCrime(DataInputStream stream, ClientKeysUtils keysUtils) {
         try {
             byte[] lengthHeader = new byte[4];
             stream.read(lengthHeader);
@@ -68,7 +70,7 @@ public final class CriminalUtils {
             if (keysUtils.isEnabled()) {
                 body = keysUtils.decrypt(body);
             }
-            Crime crime = (Crime) CriminalUtils.deserialize(body);
+            CrimeBase crime = (CrimeBase) CriminalUtils.deserialize(body);
             return crime;
         } catch (ClassNotFoundException | IOException e) {
             e.printStackTrace();
